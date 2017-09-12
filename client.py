@@ -7,6 +7,8 @@ Created on 2017年4月14日
 
 import gevent.monkey
 gevent.monkey.patch_all()
+import os
+os.remove('./worker.log')
 
 from tddc.base import WorkerManager
 from tddc.common import TDDCLogging

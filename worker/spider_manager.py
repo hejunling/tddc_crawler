@@ -50,7 +50,7 @@ class Crawler(object):
         while True:
             if self._get_spider_mqs_size() < CrawlerSite.CONCURRENT / 4:
                 while True:
-                    task = CrawlerQueues.CRAWL.get()
+                    task = CrawlerQueues.TASK_INPUT.get()
                     self._spider.add_task(task)
                     if self._get_spider_mqs_size() >= CrawlerSite.CONCURRENT:
                         break

@@ -9,6 +9,7 @@ import gevent
 
 from worker.common.queues import CrawlerQueues
 from ...proxy_pool import CrawlProxyPool
+from tddc.common.log.logger import TDDCLogging
 
 
 class ProxyMiddleware(object):
@@ -57,7 +58,7 @@ class ProxyMiddlewareExtreme(object):
             CURRENT_PROXY = ip_port
             self.set_proxy(task, request)
         except Exception, e:
-            print(e)
+            TDDCLogging.error(e)
 
     def set_proxy(self, task, request):
         global CURRENT_PROXY

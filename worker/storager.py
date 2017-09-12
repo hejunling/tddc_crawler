@@ -9,6 +9,7 @@ import gevent
 
 from worker.common.queues import CrawlerQueues
 from tddc.base import StoragerBase
+from tddc.common.models.task import Task
 
 
 class CrawlStorager(StoragerBase):
@@ -19,7 +20,9 @@ class CrawlStorager(StoragerBase):
     FAMILY = 'source'
 
     def _push_success(self, task, storage_info):
-        CrawlerQueues.PARSE.put((task, storage_info.get('rsp')[1] if storage_info.get('rsp') else None))
+        CrawlerQueues.TASK_STATUS.put((task,
+                                       storage_info.get('rsp')[1] if storage_info.get('rsp') else None,
+                                       Task.Status.WAIT_CRAWL))
 
 
 def main():

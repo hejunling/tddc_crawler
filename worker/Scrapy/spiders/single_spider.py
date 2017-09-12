@@ -6,7 +6,6 @@ Created on 2015年12月28日
 '''
 
 from string import upper
-import time
 import urlparse
 
 from scrapy import signals
@@ -22,6 +21,7 @@ import twisted.internet.error as internet_err
 import twisted.web._newclient as newclient_err
 
 from ...cookies import CookiesManager
+from tddc.common.models.task import Task
 
 
 class SingleSpider(scrapy.Spider):
@@ -72,8 +72,6 @@ class SingleSpider(scrapy.Spider):
                if not task.method or upper(task.method) == 'GET' 
                else self._make_post_request(task, headers, times))
         self.crawler.engine.schedule(req, self)
-        task.timestamp = time.time()
-        CrawlerQueues.TASK_STATUS.put(task)
 
     def _make_get_request(self, task, headers, times):
         req = Request(task.url,
@@ -114,23 +112,22 @@ class SingleSpider(scrapy.Spider):
             elif status == 404:
                 retry_times = task.retry if task.retry else 3
                 if times >= retry_times:
-                    exception = CrawlerTaskFailedException(task)
+                    exception = CrawlerTaskFailedException(**task.__dict__)
                     CrawlerQueues.EXCEPTION.put(exception)
-                    CrawlerQueues.TASK_STATUS_REMOVE.put(task)
+                    CrawlerQueues.TASK_STATUS.put((task, 404, Task.Status.WAIT_CRAWL))
                     fmt = ('[%s:%s] Crawled Failed(\033[0m 404 \033[1;37;43m| %s ). '
                            'Not Retry.')
                     TDDCLogging.warning(fmt % (task.platform,
                                                task.url,
                                                proxy))
                     return
-                times += 1
                 fmt = ('[%s:%s] Crawled Failed(\033[0m %d \033[1;37;43m| %s ). '
                        'Will Retry After While.')
                 TDDCLogging.warning(fmt % (task.platform,
                                            task.url,
                                            status,
                                            proxy))
-                self.add_task(task, True, times)
+                self.add_task(task, True, times + 1)
                 return
             else:
                 err_msg = '{status}'.format(status=status)
@@ -155,7 +152,6 @@ class SingleSpider(scrapy.Spider):
         self.add_task(task, True, times)
 
     def parse(self, response):
-#         TDDCLogging.debug('Download Success. ' + response.url)
         task,_ = response.request.meta.get('item')
         rsp_info = {'rsp': [response.url, response.status],
                     'content': response.body}
@@ -168,8 +164,6 @@ class SingleSpider(scrapy.Spider):
         '''
         if self.signals_callback:
             if signal == signals.spider_idle or signal == signals.spider_error:
-                if signal == signals.spider_error:
-                    print('err')
                 raise DontCloseSpider('..I prefer live spiders.')
             elif signal == signals.spider_opened:
                 self.signals_callback(self, signal, self)
