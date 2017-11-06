@@ -30,4 +30,6 @@ class CustomUserAgent(UserAgentMiddleware):
     def process_request(self, request, spider):
         user_agent = self._user_agent(spider)
         if user_agent:
-            request.headers['User-Agent'] = user_agent
+            # request.headers['User-Agent'] = user_agent
+            request.headers['User-Agent'] = ('Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) '
+                                             'Chrome/41.0.2228.0 Safari/537.36')

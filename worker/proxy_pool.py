@@ -122,17 +122,19 @@ class CrawlProxyPool(object):
     def get_proxy(platform):
         for _ in range(3):
             if not CrawlerQueues.PLATFORM_PROXY.get(platform):
-                gevent.sleep(1)
+                gevent.sleep(0.5)
             else:
-                break
+                if len(CrawlerQueues.PLATFORM_PROXY.get(platform)):
+                    break
         else:
-            return CrawlProxyPool.get_random_proxy()
-        while not len(CrawlerQueues.PLATFORM_PROXY.get(platform)):
-            gevent.sleep(1)
+            return None
         proxies = CrawlerQueues.PLATFORM_PROXY.get(platform)
         proxy = proxies.pop()
         while CrawlProxyPool.IP_COOLING_POOL.in_pool((proxy, platform)):
-            proxy = proxies.pop()
+            if len(proxies):
+                proxy = proxies.pop()
+            else:
+                return None
         CrawlProxyPool.IP_COOLING_POOL.push((proxy, platform))
         return proxy
 
@@ -200,6 +202,3 @@ def main():
     gevent.sleep()
     while True:
         gevent.sleep(60)
-
-if __name__ == '__main__':
-    main()

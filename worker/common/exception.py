@@ -36,14 +36,11 @@ class CrawlerTaskFailedException(ExceptionModelBase):
 
     EXCEPTION_TYPE = ExceptionType.Crawler.TASK_FAILED
 
-    def __init__(self, **kwargs):
-        super(CrawlerTaskFailedException, self).__init__(**kwargs)
-        self.task = kwargs.get('task', None) if kwargs.get('task') else None 
-
     @staticmethod
     def members():
         return dict(ExceptionModelBase.members(),
-                    **{'task': None})
+                    **{'platform': None,
+                       'task_id': None})
 
 
 class CrawlerSrorageFailedException(ExceptionModelBase):

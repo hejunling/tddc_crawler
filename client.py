@@ -5,10 +5,12 @@ Created on 2017年4月14日
 @author: chenyitao
 '''
 
+import os
+if os.path.exists('./worker.log'):
+    os.remove('./worker.log')
+
 import gevent.monkey
 gevent.monkey.patch_all()
-import os
-os.remove('./worker.log')
 
 from tddc.base import WorkerManager
 from tddc.common import TDDCLogging
@@ -23,14 +25,14 @@ from crawler_site import CrawlerSite
 
 
 class CrawlerManager(WorkerManager):
-    '''
+    """
     classdocs
-    '''
+    """
 
     def __init__(self):
-        '''
+        """
         Constructor
-        '''
+        """
         TDDCLogging.info('->Crawler Starting.')
         super(CrawlerManager, self).__init__(CrawlerSite)
         self._crawler = Crawler()
@@ -49,6 +51,7 @@ class CrawlerManager(WorkerManager):
 
 def main():
     CrawlerManager.start()
+
 
 if __name__ == '__main__':
     main()

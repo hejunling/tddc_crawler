@@ -8,20 +8,21 @@ Created on 2015年12月28日
 from string import upper
 import urlparse
 
+import gevent
 from scrapy import signals
 import scrapy
 from scrapy.exceptions import DontCloseSpider
 from scrapy.http import Request, FormRequest
 from scrapy.spidermiddlewares import httperror
 from tddc.common import TDDCLogging
-from worker.common.exception import CrawlerTaskFailedException
-from worker.common.queues import CrawlerQueues
+from tddc.common.models.task import Task
 
 import twisted.internet.error as internet_err
 import twisted.web._newclient as newclient_err
+from worker.common.queues import CrawlerQueues
+from worker.extern_modules.che300.che300 import Che300CrawlerExtern
 
 from ...cookies import CookiesManager
-from tddc.common.models.task import Task
 
 
 class SingleSpider(scrapy.Spider):
@@ -68,8 +69,8 @@ class SingleSpider(scrapy.Spider):
         if not is_retry:
             TDDCLogging.debug('Add New Task: ' + task.url)
         headers = self._init_request_headers(task)
-        req = (self._make_get_request(task, headers, times) 
-               if not task.method or upper(task.method) == 'GET' 
+        req = (self._make_get_request(task, headers, times)
+               if not task.method or upper(task.method) == 'GET'
                else self._make_post_request(task, headers, times))
         self.crawler.engine.schedule(req, self)
 
@@ -112,8 +113,9 @@ class SingleSpider(scrapy.Spider):
             elif status == 404:
                 retry_times = task.retry if task.retry else 3
                 if times >= retry_times:
-                    exception = CrawlerTaskFailedException(**task.__dict__)
-                    CrawlerQueues.EXCEPTION.put(exception)
+#                     exception = CrawlerTaskFailedException(**{'platform': task.platform,
+#                                                               'task_id': task.id})
+#                     CrawlerQueues.EXCEPTION.put(exception)
                     CrawlerQueues.TASK_STATUS.put((task, 404, Task.Status.WAIT_CRAWL))
                     fmt = ('[%s:%s] Crawled Failed(\033[0m 404 \033[1;37;43m| %s ). '
                            'Not Retry.')
@@ -129,6 +131,11 @@ class SingleSpider(scrapy.Spider):
                                            proxy))
                 self.add_task(task, True, times + 1)
                 return
+            elif status == -1000:
+                TDDCLogging.warning('[%s] Was No Proxy.' % task.platform)
+                gevent.sleep(0.5)
+                self.add_task(task, True)
+                return
             else:
                 err_msg = '{status}'.format(status=status)
         elif response.type == internet_err.TimeoutError:
@@ -139,7 +146,7 @@ class SingleSpider(scrapy.Spider):
         elif response.type == newclient_err.ResponseNeverReceived:
             err_msg = 'ResponseNeverReceived'
         else:
-            err_msg = '%s' % (response.value)
+            err_msg = '%s' % response.value
         if proxy:
             proxy = proxy.split('//')[1]
             CrawlerQueues.UNUSEFUL_PROXY_FEEDBACK.put([task.platform, proxy])
@@ -152,10 +159,14 @@ class SingleSpider(scrapy.Spider):
         self.add_task(task, True, times)
 
     def parse(self, response):
-        task,_ = response.request.meta.get('item')
+        task, _ = response.request.meta.get('item')
         rsp_info = {'rsp': [response.url, response.status],
                     'content': response.body}
         if self.signals_callback:
+            # if task.headers.get('Referer'):
+            #     return
+            # extern = Che300CrawlerExtern(task, response, self)
+            # self.signals_callback(self, SingleSpider.SIGNAL_STORAGE, [extern._task, rsp_info])
             self.signals_callback(self, SingleSpider.SIGNAL_STORAGE, [task, rsp_info])
 
     def signal_dispatcher(self, signal):

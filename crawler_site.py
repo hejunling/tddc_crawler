@@ -18,7 +18,7 @@ class CrawlerSite(conf.SiteBase):
     EVENT_TOPIC = 'tddc_c_event'
     
     # Crawler Concurrent
-    CONCURRENT = 100
+    CONCURRENT = 16
 
     # Task Input Topic Info
     TASK_INPUT_TOPIC = 'tddc_crawl'
