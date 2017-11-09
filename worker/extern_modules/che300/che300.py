@@ -12,10 +12,19 @@ import gevent
 import time
 
 import requests
+from tddc import ExternBase
 
 
-class Che300CrawlerExtern(object):
+class Che300CrawlerExtern(ExternBase):
+
+    platform = 'che300'
+
+    feature = 'che300.crawler'
+
+    version = 1000000
+
     def __init__(self, *args, **kwargs):
+        super(Che300CrawlerExtern, self).__init__()
         self._timeout = 30
         self._task = args[0]
         self._response = args[1]

@@ -1,13 +1,22 @@
 # -*- coding: utf-8 -*-
 
-from crawler_site import CrawlerSite
+# from crawler_site import CrawlerSite
+
+import logging
+
+import sys
 
 BOT_NAME = 'Scrapy'
 
 SPIDER_MODULES = ['worker.Scrapy.spiders']
 NEWSPIDER_MODULE = 'worker.Scrapy.spiders'
 
-LOG_ENABLED = False
+LOG_ENABLED = True
+LOG_FILE = 'Worker.log'
+LOG_LEVEL = logging.ERROR
+LOG_FORMAT = ('[%(asctime)s] [%(levelname)s] '
+              '[%(name)s:%(lineno)s:%(funcName)s] '
+              ' )=> %(message)s')
 
 USER_AGENT = [('Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) '
                'Chrome/41.0.2228.0 Safari/537.36'),
@@ -37,7 +46,7 @@ DEFAULT_REQUEST_HEADERS = {
 
 REACTOR_THREADPOOL_MAXSIZE = 20
 
-CONCURRENT_REQUESTS = CrawlerSite.CONCURRENT
+CONCURRENT_REQUESTS = 200 #CrawlerSite.CONCURRENT
 
 CONCURRENT_REQUESTS_PER_DOMAIN = 32
 

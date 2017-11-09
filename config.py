@@ -5,14 +5,16 @@ Created on 2017年8月31日
 @author: chenyitao
 """
 
+from tddc import ConfigCenter
 
-class ConfigCenter(ConfigBase):
+
+class ConfigCenterExtern(ConfigCenter):
 
     @staticmethod
     def tables():
-        return dict(ConfigBase.tables(),
+        return dict(ConfigCenter.tables(),
                     **{'cookies': {'key': 'TEXT'},
-                       'proxies': {'key': 'TEXT'},
+                       'proxies': {'pool_key': 'TEXT'},
                        'task': {'consumer_topic': 'TEXT',
                                 'consumer_group': 'TEXT',
                                 'producer_topic': 'TEXT',

@@ -6,22 +6,19 @@ Created on 2017年4月14日
 '''
 
 import os
-if os.path.exists('./worker.log'):
-    os.remove('./worker.log')
+import setproctitle
 
 import gevent.monkey
+
 gevent.monkey.patch_all()
 
-from tddc.base import WorkerManager
-from tddc.common import TDDCLogging
 from twisted.internet import reactor
 
-from worker.cookies import CookiesManager
-from worker.proxy_pool import CrawlProxyPool
+from config import ConfigCenterExtern
+from tddc import WorkerManager, Storager
+
 from worker.spider_manager import Crawler
-from worker.storager import CrawlStorager
-from worker.task import CrawlTaskManager
-from crawler_site import CrawlerSite
+from worker.task import TaskManager
 
 
 class CrawlerManager(WorkerManager):
@@ -33,17 +30,21 @@ class CrawlerManager(WorkerManager):
         """
         Constructor
         """
-        TDDCLogging.info('->Crawler Starting.')
-        super(CrawlerManager, self).__init__(CrawlerSite)
-        self._crawler = Crawler()
-        self._storager = CrawlStorager(CrawlerSite.random_hbase_node())
-        self._proxy_pool = CrawlProxyPool()
-        self._cookies = CookiesManager()
-        self._task_manager = CrawlTaskManager()
-        TDDCLogging.info('->Crawler Was Ready.')
+        super(CrawlerManager, self).__init__()
+        self.info('Crawler Starting.')
+        Crawler()
+        Storager()
+        TaskManager()
+        # self._proxy_pool = CrawlProxyPool()
+        # self._cookies = CookiesManager()
+        self.info('Crawler Was Ready.')
 
     @staticmethod
     def start():
+        if os.path.exists('./Worker.log'):
+            os.remove('./Worker.log')
+        ConfigCenterExtern()
+        setproctitle.setproctitle(ConfigCenterExtern().get_worker().name)
         reactor.__init__()  # @UndefinedVariable
         CrawlerManager()
         reactor.run()  # @UndefinedVariable

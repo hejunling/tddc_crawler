@@ -8,37 +8,37 @@ import gevent
 from scrapy import signals
 from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
-from tddc.base import EventCenter
-from tddc.common import TDDCLogging
+from tddc import TDDCLogger, EventCenter, Singleton
+from worker.task import TaskManager, TaskStatus
 
-from crawler_site import CrawlerSite
-
+from config import ConfigCenterExtern
 from .Scrapy import SingleSpider
-from worker.common.event import EventType
-from worker.common.queues import CrawlerQueues
-
 
 settings = get_project_settings()
 crawler_process = CrawlerProcess(settings)
 crawler_process.join()
 
-class Crawler(object):
+
+class Crawler(TDDCLogger):
     '''
     classdocs
     '''
+    __metaclass__ = Singleton
 
     def __init__(self):
         '''
         Constructor
         '''
-        TDDCLogging.info('-->Spider Is Starting.')
+        super(Crawler, self).__init__()
+        self.info('Spider Is Starting.')
         self._spider = None
         self._spider_mqs = None
         self._signals_list = {signals.spider_opened: self._spider_opened,
-                              SingleSpider.SIGNAL_STORAGE: self._storage}
+                              SingleSpider.SIGNAL_CRAWL_SUCCESSED: self._crawl_successed,
+                              SingleSpider.SIGNAL_CRAWL_FAILED: self._crawl_failed}
         self._process = crawler_process
         self._process.crawl(SingleSpider, callback=self._spider_signals)
-        EventCenter().register(EventType.Crawler.MODULE, self._rule_update)
+        EventCenter().register(1003, self._rule_update)
         
     def _rule_update(self, event):
         print(event.__dict__)
@@ -47,39 +47,38 @@ class Crawler(object):
         return len(self._spider_mqs) if self._spider_mqs else 0
 
     def _task_dispatch(self):
+        size = int(ConfigCenterExtern().get_task().local_task_queue_size)
+        gevent.sleep(3)
         while True:
-            if self._get_spider_mqs_size() < CrawlerSite.CONCURRENT / 4:
+            if self._get_spider_mqs_size() < size / 4:
                 while True:
-                    task = CrawlerQueues.TASK_INPUT.get()
+                    task = TaskManager().get()
                     self._spider.add_task(task)
-                    if self._get_spider_mqs_size() >= CrawlerSite.CONCURRENT:
+                    if self._get_spider_mqs_size() >= size:
                         break
             else:
                 gevent.sleep(1)
     
-    def _spider_signals(self, spider, signal, params=None):
+    def _spider_signals(self, signal, *args, **kwargs):
         if signal not in self._signals_list.keys():
             return
         func = self._signals_list.get(signal, None)
         if func:
-            func(params)
-  
+            func(*args, **kwargs)
+
     def _spider_opened(self, spider):
         if not self._spider:
             self._spider = spider
             self._spider_mqs = spider.crawler.engine.slot.scheduler.mqs
             gevent.spawn(self._task_dispatch)
             gevent.sleep()
-            TDDCLogging.info('-->Spider Was Ready.')
+            self.info('Spider Was Ready.')
 
-    def _storage(self, items=None):
-        CrawlerQueues.STORAGE.put(items)
+    def _crawl_successed(self, task, data):
+        task.cur_status, task.pre_status = TaskStatus.CrawledSuccess, task.cur_status
+        TaskManager().task_successed(task,
+                                     data)
 
-
-def main():
-    Crawler()
-    while True:
-        gevent.sleep(60)
-
-if __name__ == '__main__':
-    main()
+    def _crawl_failed(self, task, status):
+        task.cur_status. task.pre_status = status, task.cur_status
+        TaskManager().task_failed(task)
