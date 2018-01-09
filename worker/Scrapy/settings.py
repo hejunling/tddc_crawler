@@ -4,19 +4,18 @@
 
 import logging
 
-import sys
-
 BOT_NAME = 'Scrapy'
 
 SPIDER_MODULES = ['worker.Scrapy.spiders']
 NEWSPIDER_MODULE = 'worker.Scrapy.spiders'
 
 LOG_ENABLED = True
-LOG_FILE = 'Worker.log'
-LOG_LEVEL = logging.ERROR
+LOG_FILE = 'Scrapy.log'
+LOG_LEVEL = logging.DEBUG
 LOG_FORMAT = ('[%(asctime)s] [%(levelname)s] '
               '[%(name)s:%(lineno)s:%(funcName)s] '
               ' )=> %(message)s')
+
 
 USER_AGENT = [('Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) '
                'Chrome/41.0.2228.0 Safari/537.36'),
@@ -46,15 +45,17 @@ DEFAULT_REQUEST_HEADERS = {
 
 REACTOR_THREADPOOL_MAXSIZE = 20
 
-CONCURRENT_REQUESTS = 200 #CrawlerSite.CONCURRENT
+CONCURRENT_REQUESTS = 32
 
-CONCURRENT_REQUESTS_PER_DOMAIN = 32
+CONCURRENT_REQUESTS_PER_IP = 0xffffff
+
+CONCURRENT_REQUESTS_PER_DOMAIN = 0xffffff
 
 CONCURRENT_ITEMS = 0
 
 DOWNLOAD_DELAY = 0
 
-DOWNLOAD_TIMEOUT = 15
+DOWNLOAD_TIMEOUT = 30
 
 COOKIES_ENABLED = False
 

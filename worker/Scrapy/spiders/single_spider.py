@@ -4,10 +4,12 @@ Created on 2015年12月28日
 
 @author: chenyitao
 '''
+
+import json
 import random
 import urlparse
 
-import gevent
+import gevent.queue
 from scrapy import signals
 import scrapy
 from scrapy.exceptions import DontCloseSpider
@@ -17,7 +19,7 @@ from scrapy.spidermiddlewares import httperror
 import twisted.internet.error as internet_err
 import twisted.web._newclient as newclient_err
 
-from tddc import TDDCLogger, object2json, CacheManager
+from tddc import TDDCLogger, object2json, CacheManager, TaskManager
 
 from config import ConfigCenterExtern
 
@@ -62,18 +64,13 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
 
     @staticmethod
     def _init_request_headers(task):
-        iheaders = {}
-        if not task.headers:
+        if hasattr(task, 'headers'):
+            if isinstance(task.headers, str) or isinstance(task.headers, unicode):
+                task.headers = json.loads(task.headers)
+        else:
             url_info = urlparse.urlparse(task.url)
             task.headers = {'Host': url_info[1]}
-        for k, v in task.headers.items():
-            if not v:
-                if k == 'Host':
-                    url_info = urlparse.urlparse(task.url)
-                    iheaders[k] = url_info[1]
-                continue
-            iheaders[k] = v
-        return iheaders
+        return task.headers
 
     def add_task(self, task, is_retry=False, times=1):
         if not is_retry:
@@ -83,6 +80,7 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
                if getattr(task, 'method', 'GET') == 'GET'
                else self._make_post_request(task, headers, times))
         self.crawler.engine.schedule(req, self)
+        TaskManager().task_status_changed(task)
 
     def _make_get_request(self, task, headers, times):
         req = Request(task.url,
@@ -106,88 +104,85 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
                           dont_filter=True)
         return req
 
+    def http_error(self, task, times, proxy, response):
+        status = response.value.response.status
+        if status >= 500 or status in [408, 429]:
+            fmt = '[%s:%s] Crawled Failed(> %d | %s <). Will Retry After While.'
+            self.warning(fmt % (task.platform, task.url, status, proxy))
+            self.add_task(task, True)
+            return
+        elif status == 404:
+            retry_times = task.retry if task.retry else 3
+            if times >= retry_times:
+                fmt = '[%s:%s] Crawled Failed(> 404 | %s <). Not Retry.'
+                self.warning(fmt % (task.platform,  task.url, proxy))
+                if not self.signals_callback:
+                    return
+                self.signals_callback(self.SIGNAL_CRAWL_FAILED, task=task, status=status)
+                return
+            fmt = '[%s:%s] Crawled Failed(> %d | %s <). Will Retry After While.'
+            self.warning(fmt % (task.platform, task.url, status, proxy))
+            self.add_task(task, True, times + 1)
+            return
+        elif status == -1000:
+            self.warning('[%s] Was No Proxy.' % task.platform)
+
+            def _retry():
+                self.add_task(task, True)
+            gevent.spawn_later(5, _retry)
+            return
+        else:
+            err_msg = '{status}'.format(status=status)
+            fmt = '[%s:%s] Crawled Failed(> %s | %s <). Will Retry After While.'
+            self.warning(fmt % (task.platform, task.url, err_msg, proxy))
+            self.remove_proxy(task, proxy)
+
+    def remove_proxy(self, task, proxy):
+        if not proxy:
+            return
+        proxy = proxy.split('//')[1]
+        if getattr(task, 'proxy_type', 'http') == 'ADSL':
+            CacheManager().remove('tddc:proxy:adsl', proxy)
+        else:
+            CacheManager().remove('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
+                                             task.platform),
+                                  proxy)
+
     def error_back(self, response):
         task, times = response.request.meta['item']
         proxy = response.request.meta.get('proxy', None)
         if response.type == httperror.HttpError:
-            status = response.value.response.status
-            if status >= 500 or status in [408, 429]: 
-                fmt = ('[%s:%s] Crawled Failed(> %d | %s <). '
-                       'Will Retry After While.')
-                self.warning(fmt % (task.platform,
-                                    task.url,
-                                    status,
-                                    proxy))
-                self.add_task(task, True)
-                return
-            elif status == 404:
-                retry_times = task.retry if task.retry else 3
-                if times >= retry_times:
-                    fmt = ('[%s:%s] Crawled Failed(> 404 | %s <). '
-                           'Not Retry.')
-                    self.warning(fmt % (task.platform,
-                                        task.url,
-                                        proxy))
-                    callable(self.signals_callback(self.SIGNAL_CRAWL_FAILED,
-                                                   task=task,
-                                                   status=status))
-                    return
-                fmt = ('[%s:%s] Crawled Failed(> %d | %s <). '
-                       'Will Retry After While.')
-                self.warning(fmt % (task.platform,
-                                    task.url,
-                                    status,
-                                    proxy))
-                self.add_task(task, True, times + 1)
-                return
-            elif status == -1000:
-                self.warning('[%s] Was No Proxy.' % task.platform)
-
-                def _retry():
-                    self.add_task(task, True)
-                gevent.spawn_later(5, _retry)
-                return
-            else:
-                err_msg = '{status}'.format(status=status)
+            self.http_error(task, times, proxy, response)
+            return
         elif response.type == internet_err.TimeoutError:
             err_msg = 'TimeoutError'
         elif response.type in [internet_err.ConnectionRefusedError,
                                internet_err.TCPTimedOutError]:
             err_msg = '%d:%s' % (response.value.osError, response.value.message)
+            self.remove_proxy(task, proxy)
         elif response.type == newclient_err.ResponseNeverReceived:
             err_msg = 'ResponseNeverReceived'
         else:
             err_msg = '%s' % response.value
-        if proxy:
-            proxy = proxy.split('//')[1]
-            CacheManager().remove('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
-                                             task.platform),
-                                  proxy)
-        fmt = ('[%s:%s] Crawled Failed(> %s | %s <). '
-               'Will Retry After While.')
-        self.warning(fmt % (task.platform,
-                            task.url,
-                            err_msg,
-                            proxy))
+        fmt = '[%s:%s] Crawled Failed(> %s | %s <). Will Retry After While.'
+        self.warning(fmt % (task.platform, task.url, err_msg, proxy))
         self.add_task(task, True, times)
 
     def parse(self, response):
         task, _ = response.request.meta.get('item')
         proxy = response.request.meta.get('proxy', None)
-        if proxy:
+        if proxy and getattr(task, 'proxy_type', 'http') != 'ADSL':
             def _back_pool():
                 CacheManager().set('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
                                               task.platform),
                                    proxy.split('//')[1])
-
             gevent.spawn_later(random.uniform(3, 5), _back_pool)
         # extern = Che300CrawlerExtern(task, response, self)
-        if self.signals_callback:
-            data = {'table': task.platform,
-                    'row_key': task.row_key,
-                    'data': {'source': {'rsp': '|'.join((response.url, str(response.status))),
-                                        'content': response.body},
-                             'task': {'task': object2json(task)}}}
-            self.signals_callback(SingleSpider.SIGNAL_CRAWL_SUCCESSED,
-                                  task=task,
-                                  data=data)
+        if not self.signals_callback:
+            return
+        data = {'table': task.platform,
+                'row_key': task.row_key,
+                'data': {'source': {'rsp': '|'.join((response.url, str(response.status))),
+                                    'content': response.body},
+                         'task': {'task': object2json(task)}}}
+        self.signals_callback(SingleSpider.SIGNAL_CRAWL_SUCCESSED, task=task, data=data)

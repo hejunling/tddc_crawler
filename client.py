@@ -7,18 +7,17 @@ Created on 2017年4月14日
 
 import os
 import setproctitle
+import worker.log_extern
 
 import gevent.monkey
-
 gevent.monkey.patch_all()
 
 from twisted.internet import reactor
 
-from config import ConfigCenterExtern
-from tddc import WorkerManager, Storager
+from tddc import WorkerManager, Storager, TaskManager
 
+from config import ConfigCenterExtern
 from worker.spider_manager import Crawler
-from worker.task import TaskManager
 
 
 class CrawlerManager(WorkerManager):
@@ -35,14 +34,14 @@ class CrawlerManager(WorkerManager):
         Crawler()
         Storager()
         TaskManager()
-        # self._proxy_pool = CrawlProxyPool()
-        # self._cookies = CookiesManager()
         self.info('Crawler Was Ready.')
 
     @staticmethod
     def start():
         if os.path.exists('./Worker.log'):
             os.remove('./Worker.log')
+        if os.path.exists('./Scrapy.log'):
+            os.remove('./Scrapy.log')
         ConfigCenterExtern()
         setproctitle.setproctitle(ConfigCenterExtern().get_worker().name)
         reactor.__init__()  # @UndefinedVariable

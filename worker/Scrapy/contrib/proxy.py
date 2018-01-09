@@ -11,10 +11,15 @@ from tddc import CacheManager
 from config import ConfigCenterExtern
 
 
+SWITCHING = False
+
+
 class ProxyMiddleware(object):
     '''
     Proxy
     '''
+
+    ADSL_PROXY = None
 
     def process_request(self, request, spider):
         '''
@@ -24,11 +29,14 @@ class ProxyMiddleware(object):
         if not proxy:
             task, _ = request.meta.get('item')
             if getattr(task, 'proxy_type', 'http') != 'None':
-                ip_port = CacheManager().get_random('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
-                                                               task.platform))
+                if getattr(task, 'proxy_type', 'http') == 'ADSL':
+                    ip_port = CacheManager().get_random('tddc:proxy:adsl', False)
+                else:
+                    ip_port = CacheManager().get_random('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
+                                                                   task.platform))
+                    request.headers['X-Forwarded-For'] = ip_port.split(':')[0]
                 if not ip_port:
                     return Response(url=request.url, status=-1000, request=request)
                 ip, port = ip_port.split(':')
-                proxy = '%s://%s:%s' % (getattr(task, 'proxy_type', 'http'), ip, port)
+                proxy = 'http://%s:%s' % (ip, port)  # getattr(task, 'proxy_type', 'http'),
                 request.meta['proxy'] = proxy
-                request.headers['X-Forwarded-For'] = '8.8.8.8'

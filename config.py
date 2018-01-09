@@ -5,29 +5,21 @@ Created on 2017年8月31日
 @author: chenyitao
 """
 
-from tddc import ConfigCenter
+from tddc import WorkerConfigCenter
 
 
-class ConfigCenterExtern(ConfigCenter):
+class ConfigCenterExtern(WorkerConfigCenter):
 
     @staticmethod
     def tables():
-        return dict(ConfigCenter.tables(),
-                    **{'cookies': {'key': 'TEXT'},
-                       'proxies': {'pool_key': 'TEXT'},
-                       'task': {'consumer_topic': 'TEXT',
-                                'consumer_group': 'TEXT',
-                                'producer_topic': 'TEXT',
-                                'producer_group': 'TEXT',
-                                'status_key_base': 'TEXT',
-                                'record_key_base': 'TEXT',
-                                'local_task_queue_size': 'TEXT'}})
+        return dict(WorkerConfigCenter.tables(),
+                    **{'cookies': {'key': {"field_type": "TEXT",
+                                           "default_value": "tddc:cookies"}},
+                       'proxies': {'pool_key': {"field_type": "TEXT",
+                                                "default_value": "tddc:proxy:pool"}}})
 
     def get_cookies(self):
         return self._get_info('cookies')
 
     def get_proxies(self):
         return self._get_info('proxies')
-
-    def get_task(self):
-        return self._get_info('task')
