@@ -5,6 +5,8 @@ Created on 2015年8月26日
 @author: chenyitao
 '''
 
+import base64
+
 from scrapy.http import Response
 from tddc import CacheManager
 
@@ -31,6 +33,8 @@ class ProxyMiddleware(object):
             if getattr(task, 'proxy_type', 'http') != 'None':
                 if getattr(task, 'proxy_type', 'http') == 'ADSL':
                     ip_port = CacheManager().get_random('tddc:proxy:adsl', False)
+                    auth = base64.encodestring('tddc_crawler:tddc_crawler!@#$%^')
+                    request.headers['Proxy-Authorization'] = 'Basic ' + auth
                 else:
                     ip_port = CacheManager().get_random('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
                                                                    task.platform))

@@ -5,23 +5,22 @@ Created on 2015年12月28日
 @author: chenyitao
 '''
 
-import json
 import random
-import urlparse
 
 import gevent.queue
 from scrapy import signals
 import scrapy
 from scrapy.exceptions import DontCloseSpider
-from scrapy.http import Request, FormRequest
 from scrapy.spidermiddlewares import httperror
 
 import twisted.internet.error as internet_err
 import twisted.web._newclient as newclient_err
 
-from tddc import TDDCLogger, object2json, CacheManager, TaskManager
+from tddc import TDDCLogger, object2json, CacheManager, TaskManager, ExternManager
 
 from config import ConfigCenterExtern
+from worker.extern_modules.request import RequestExtra, FormRequestExtra
+from worker.extern_modules.response import ResponseExtra
 
 
 class SingleSpider(scrapy.Spider, TDDCLogger):
@@ -62,47 +61,23 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
             elif signal == signals.spider_opened:
                 self.signals_callback(signal, spider=self)
 
-    @staticmethod
-    def _init_request_headers(task):
-        if hasattr(task, 'headers'):
-            if isinstance(task.headers, str) or isinstance(task.headers, unicode):
-                task.headers = json.loads(task.headers)
-        else:
-            url_info = urlparse.urlparse(task.url)
-            task.headers = {'Host': url_info[1]}
-        return task.headers
-
     def add_task(self, task, is_retry=False, times=1):
         if not is_retry:
             self.debug('Add New Task: ' + task.url)
-        headers = self._init_request_headers(task)
-        req = (self._make_get_request(task, headers, times)
-               if getattr(task, 'method', 'GET') == 'GET'
-               else self._make_post_request(task, headers, times))
+        request_cls = ExternManager().get_model(task.platform, task.feature + '.request')
+        if not request_cls:
+            method = getattr(task, 'method', 'GET')
+            if method == 'GET':
+                request_cls = RequestExtra
+            elif method == 'POST':
+                request_cls = FormRequestExtra
+            else:
+                fmt = '[%s:%s] Invalid Task.'
+                self.warning(fmt % (task.platform, task.id))
+                return
+        req = request_cls(self, task, times)
         self.crawler.engine.schedule(req, self)
         TaskManager().task_status_changed(task)
-
-    def _make_get_request(self, task, headers, times):
-        req = Request(task.url,
-                      headers=headers,
-                      cookies=getattr(task, 'cookie', None),  # or CookiesManager.get_cookie(task.platform),
-                      callback=self.parse,
-                      errback=self.error_back,
-                      meta={'item': [task, times]},
-                      dont_filter=True)
-        return req
-
-    def _make_post_request(self, task, headers, times):
-        form_data = {'params': headers.get('post_params', None)}
-        req = FormRequest(task.url,
-                          formdata=form_data,
-                          headers=headers,
-                          cookies=task.cookie or CookiesManager.get_cookie(task.platform),
-                          callback=self.parse,
-                          errback=self.error_back,
-                          meta={'item': [task, times]},
-                          dont_filter=True)
-        return req
 
     def http_error(self, task, times, proxy, response):
         status = response.value.response.status
@@ -169,15 +144,23 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
         self.add_task(task, True, times)
 
     def parse(self, response):
-        task, _ = response.request.meta.get('item')
+        task, times = response.request.meta.get('item')
         proxy = response.request.meta.get('proxy', None)
-        if proxy and getattr(task, 'proxy_type', 'http') != 'ADSL':
+        response_cls = ExternManager().get_model(task.platform, task.feature + '.response')
+        if not response_cls:
+            response_cls = ResponseExtra
+        if not response_cls(self, response).success():
+            self.remove_proxy(task, proxy)
+            fmt = '[%s:%s] Crawled Failed. Response Body Exception(%s).'
+            self.warning(fmt % (task.platform, task.url, proxy))
+            self.add_task(task, True, times)
+            return
+        if getattr(task, 'proxy_type', 'http') != 'ADSL':
             def _back_pool():
                 CacheManager().set('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
                                               task.platform),
                                    proxy.split('//')[1])
             gevent.spawn_later(random.uniform(3, 5), _back_pool)
-        # extern = Che300CrawlerExtern(task, response, self)
         if not self.signals_callback:
             return
         data = {'table': task.platform,
