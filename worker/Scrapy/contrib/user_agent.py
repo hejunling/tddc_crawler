@@ -1,11 +1,9 @@
-#!/usr/bin/python
-#-*-coding:utf-8-*-
-
-'''
+# -*- coding: utf-8 -*-
+"""
 Created on 2015年8月7日
 
-@author: chenyitao1
-'''
+@author: chenyitao
+"""
 
 import random
 from scrapy.downloadermiddlewares.useragent import UserAgentMiddleware
@@ -16,7 +14,7 @@ class CustomUserAgent(UserAgentMiddleware):
     '''
     user agent
     '''
-    
+
     user_agent_list = settings.attributes['USER_AGENT'].value
 
     def _user_agent(self, spider):

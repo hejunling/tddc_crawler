@@ -32,7 +32,6 @@ class CrawlerManager(WorkerManager):
         super(CrawlerManager, self).__init__()
         self.info('Crawler Starting.')
         Crawler()
-        Storager()
         TaskManager()
         self.info('Crawler Was Ready.')
 
