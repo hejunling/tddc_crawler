@@ -14,7 +14,7 @@ gevent.monkey.patch_all()
 
 from twisted.internet import reactor
 
-from tddc import WorkerManager, Storager, TaskManager
+from tddc import WorkerManager, TaskManager
 
 from config import ConfigCenterExtern
 from worker.spider_manager import Crawler

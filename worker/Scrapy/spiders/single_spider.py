@@ -164,8 +164,6 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
         if not self.signals_callback:
             return
         data = {'table': task.platform,
-                'row_key': task.row_key,
-                'data': {'source': {'rsp': '|'.join((response.url, str(response.status))),
-                                    'content': response.body},
-                         'task': {'task': object2json(task)}}}
+                'row_key': task.id,
+                'data': {'source': {'content': response.body}}}
         self.signals_callback(SingleSpider.SIGNAL_CRAWL_SUCCESSED, task=task, data=data)

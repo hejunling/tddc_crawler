@@ -10,7 +10,7 @@ SPIDER_MODULES = ['worker.Scrapy.spiders']
 NEWSPIDER_MODULE = 'worker.Scrapy.spiders'
 
 LOG_ENABLED = True
-LOG_FILE = 'Scrapy.log'
+LOG_FILE = 'Worker.log'
 LOG_LEVEL = logging.DEBUG
 LOG_FORMAT = ('[%(asctime)s] [%(levelname)s] '
               '[%(name)s:%(lineno)s:%(funcName)s] '

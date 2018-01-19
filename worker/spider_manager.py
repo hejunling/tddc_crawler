@@ -5,9 +5,11 @@ Created on 2017年4月14日
 '''
 
 import gevent
+
 from scrapy import signals
 from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
+
 from tddc import TDDCLogger, Singleton, TaskManager, TaskStatus, Storager
 
 from config import ConfigCenterExtern
