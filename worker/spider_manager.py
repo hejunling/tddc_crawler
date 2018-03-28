@@ -3,6 +3,7 @@
 Created on 2017年4月14日
 @author: chenyitao
 '''
+import logging
 
 import gevent
 
@@ -10,17 +11,19 @@ from scrapy import signals
 from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 
-from tddc import TDDCLogger, Singleton, TaskManager, TaskStatus, Storager
+from tddc import Singleton, TaskManager, Storager, Task, CacheManager, TaskCacheManager, TaskConfigModel, DBSession
 
-from config import ConfigCenterExtern
+# from config import ConfigCenterExtern
 from .Scrapy import SingleSpider
 
 settings = get_project_settings()
 crawler_process = CrawlerProcess(settings)
 crawler_process.join()
 
+log = logging.getLogger(__name__)
 
-class Crawler(TDDCLogger):
+
+class Crawler(object):
     '''
     classdocs
     '''
@@ -30,8 +33,9 @@ class Crawler(TDDCLogger):
         '''
         Constructor
         '''
+        log.info('Spider Is Starting.')
         super(Crawler, self).__init__()
-        self.info('Spider Is Starting.')
+        self.task_conf = DBSession.query(TaskConfigModel).get(1)
         self._spider = None
         self._spider_mqs = None
         self._signals_list = {signals.spider_opened: self._spider_opened,
@@ -44,7 +48,7 @@ class Crawler(TDDCLogger):
         return len(self._spider_mqs) if self._spider_mqs else 0
 
     def _task_dispatch(self):
-        size = int(ConfigCenterExtern().get_task().local_task_queue_size)
+        size = self.task_conf.max_queue_size
         gevent.sleep(3)
         while True:
             if self._get_spider_mqs_size() < size / 4:
@@ -69,18 +73,15 @@ class Crawler(TDDCLogger):
             self._spider_mqs = spider.crawler.engine.slot.scheduler.mqs
             gevent.spawn(self._task_dispatch)
             gevent.sleep()
-            self.info('Spider Was Ready.')
+            log.info('Spider Was Ready.')
 
     def _crawl_successed(self, task, data):
-        task.cur_status, task.pre_status = TaskStatus.CrawledSuccess, task.cur_status
-
-        def _storaged(_):
-            TaskManager().push_task(task,
-                                    ConfigCenterExtern().get_task().producer_topic,
-                                    False)
-            TaskManager().task_successed(task)
-        Storager().storage(data, _storaged)
+        TaskCacheManager().set_cache(task, data)
+        task.status = Task.Status.CrawledSuccess
+        TaskManager().push_task(task,
+                                self.task_conf.parser_topic)
+        TaskManager().task_successed(task)
 
     def _crawl_failed(self, task, status):
-        task.cur_status. task.pre_status = status, task.cur_status
+        task.status = status
         TaskManager().task_failed(task)

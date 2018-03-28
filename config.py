@@ -4,22 +4,17 @@ Created on 2017年8月31日
 
 @author: chenyitao
 """
+from sqlalchemy import Column, Integer, String
 
-from tddc import WorkerConfigCenter
+from tddc import Base, engine
 
 
-class ConfigCenterExtern(WorkerConfigCenter):
+class ProxyModel(Base):
+    __tablename__ = 'proxy_info'
 
-    @staticmethod
-    def tables():
-        return dict(WorkerConfigCenter.tables(),
-                    **{'cookies': {'key': {"field_type": "TEXT",
-                                           "default_value": "tddc:cookies"}},
-                       'proxies': {'pool_key': {"field_type": "TEXT",
-                                                "default_value": "tddc:proxy:pool"}}})
+    id = Column(Integer, primary_key=True)
+    source_key = Column(String(32))
+    pool_key = Column(String(32))
 
-    def get_cookies(self):
-        return self._get_info('cookies')
 
-    def get_proxies(self):
-        return self._get_info('proxies')
+Base.metadata.create_all(engine)

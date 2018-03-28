@@ -31,7 +31,7 @@ USER_AGENT = [('Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gec
                'Chrome/42.0.2311.135 Safari/537.36 Edge/12.246'),
               ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.75.14 (KHTML, like Gecko) '
                'Version/7.0.3 Safari/7046A194A'),
-              ('User-Agent    Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/602.1.50 (KHTML, like Gecko) '
+              ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/602.1.50 (KHTML, like Gecko) '
                'Version/10.0 Safari/602.1.50')]
 
 DEFAULT_REQUEST_HEADERS = {

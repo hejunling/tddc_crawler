@@ -4,7 +4,7 @@ Created on 2015年12月28日
 
 @author: chenyitao
 '''
-
+import logging
 import random
 
 import gevent.queue
@@ -16,14 +16,20 @@ from scrapy.spidermiddlewares import httperror
 import twisted.internet.error as internet_err
 import twisted.web._newclient as newclient_err
 
-from tddc import TDDCLogger, object2json, CacheManager, TaskManager, ExternManager
+from config import ProxyModel
+from tddc import CacheManager, ExternManager, TaskRecordManager, DBSession
 
-from config import ConfigCenterExtern
 from worker.extern_modules.request import RequestExtra, FormRequestExtra
 from worker.extern_modules.response import ResponseExtra
 
 
-class SingleSpider(scrapy.Spider, TDDCLogger):
+log = logging.getLogger(__name__)
+
+
+task_conf = DBSession.query(ProxyModel).get(1)
+
+
+class SingleSpider(scrapy.Spider):
     '''
     single spider
     '''
@@ -63,7 +69,7 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
 
     def add_task(self, task, is_retry=False, times=1):
         if not is_retry:
-            self.debug('Add New Task: ' + task.url)
+            log.debug('Add New Task: ' + task.url)
         request_cls = ExternManager().get_model(task.platform, task.feature + '.request')
         if not request_cls:
             method = getattr(task, 'method', 'GET')
@@ -73,30 +79,30 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
                 request_cls = FormRequestExtra
             else:
                 fmt = '[%s:%s] Invalid Task.'
-                self.warning(fmt % (task.platform, task.id))
+                log.warning(fmt % (task.platform, task.id))
                 return
         req = request_cls(self, task, times)
         self.crawler.engine.schedule(req, self)
-        TaskManager().task_status_changed(task)
+        TaskRecordManager().start_task_timer(task)
 
     def http_error(self, task, times, proxy, response):
         status = response.value.response.status
         if status >= 500 or status in [408, 429]:
             fmt = '[%s:%s] Crawled Failed(> %d | %s <). Will Retry After While.'
-            self.warning(fmt % (task.platform, task.url, status, proxy))
+            log.warning(fmt % (task.platform, task.url, status, proxy))
             self.add_task(task, True)
             return
         elif status == 404:
             retry_times = task.retry if task.retry else 3
             if times >= retry_times:
                 fmt = '[%s:%s] Crawled Failed(> 404 | %s <). Not Retry.'
-                self.warning(fmt % (task.platform,  task.url, proxy))
+                log.warning(fmt % (task.platform,  task.url, proxy))
                 if not self.signals_callback:
                     return
                 self.signals_callback(self.SIGNAL_CRAWL_FAILED, task=task, status=status)
                 return
             fmt = '[%s:%s] Crawled Failed(> %d | %s <). Will Retry After While.'
-            self.warning(fmt % (task.platform, task.url, status, proxy))
+            log.warning(fmt % (task.platform, task.url, status, proxy))
             self.add_task(task, True, times + 1)
             return
         elif status == -1000:
@@ -109,7 +115,7 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
         else:
             err_msg = '{status}'.format(status=status)
             fmt = '[%s:%s] Crawled Failed(> %s | %s <). Will Retry After While.'
-            self.warning(fmt % (task.platform, task.url, err_msg, proxy))
+            log.warning(fmt % (task.platform, task.url, err_msg, proxy))
             self.remove_proxy(task, proxy)
 
     def remove_proxy(self, task, proxy):
@@ -119,7 +125,7 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
         if getattr(task, 'proxy_type', 'http') == 'ADSL':
             CacheManager().remove('tddc:proxy:adsl', proxy)
         else:
-            CacheManager().remove('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
+            CacheManager().remove('%s:%s' % (task_conf.pool_key,
                                              task.platform),
                                   proxy)
 
@@ -140,7 +146,7 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
         else:
             err_msg = '%s' % response.value
         fmt = '[%s:%s] Crawled Failed(> %s | %s <). Will Retry After While.'
-        self.warning(fmt % (task.platform, task.url, err_msg, proxy))
+        log.warning(fmt % (task.platform, task.url, err_msg, proxy))
         self.add_task(task, True, times)
 
     def parse(self, response):
@@ -149,21 +155,25 @@ class SingleSpider(scrapy.Spider, TDDCLogger):
         response_cls = ExternManager().get_model(task.platform, task.feature + '.response')
         if not response_cls:
             response_cls = ResponseExtra
-        if not response_cls(self, response).success():
+        rsp = response_cls(self, response)
+        success = rsp.success()
+        if success == -1:
             self.remove_proxy(task, proxy)
             fmt = '[%s:%s] Crawled Failed. Response Body Exception(%s).'
-            self.warning(fmt % (task.platform, task.url, proxy))
+            log.warning(fmt % (task.platform, task.url, proxy))
+            task.proxy = None
             self.add_task(task, True, times)
+            return
+        elif success == 0:
+            self.add_task(task, True, times - 1)
             return
         if getattr(task, 'proxy_type', 'http') != 'ADSL':
             def _back_pool():
-                CacheManager().set('%s:%s' % (ConfigCenterExtern().get_proxies().pool_key,
+                CacheManager().set('%s:%s' % (task_conf.pool_key,
                                               task.platform),
                                    proxy.split('//')[1])
             gevent.spawn_later(random.uniform(3, 5), _back_pool)
         if not self.signals_callback:
             return
-        data = {'table': task.platform,
-                'row_key': task.id,
-                'data': {'source': {'content': response.body}}}
+        data = response.body
         self.signals_callback(SingleSpider.SIGNAL_CRAWL_SUCCESSED, task=task, data=data)
