@@ -79,9 +79,9 @@ class Crawler(object):
     def _crawl_successed(self, task, data):
         TaskCacheManager().set_cache(task, data)
         task.status = Task.Status.CrawledSuccess
+        TaskManager().task_successed(task)
         TaskManager().push_task(task,
                                 self.task_conf.parser_topic)
-        TaskManager().task_successed(task)
 
     def _crawl_failed(self, task, status):
         task.status = status
