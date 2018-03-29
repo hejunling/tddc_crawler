@@ -12,6 +12,9 @@ from tddc import ExternBase
 
 
 class HeadersHelper(object):
+    """
+    默认请求Headers
+    """
 
     task = None
 
@@ -41,6 +44,9 @@ class HeadersHelper(object):
 
 
 class RequestExtra(Request, ExternBase, HeadersHelper):
+    """
+    GET 请求扩展
+    """
 
     def __init__(self, spider=None, task=None, times=0, **kwargs):
         self.task = task
@@ -58,6 +64,9 @@ class RequestExtra(Request, ExternBase, HeadersHelper):
 
 
 class FormRequestExtra(FormRequest, ExternBase, HeadersHelper):
+    """
+    POST 请求扩展
+    """
 
     def __init__(self, spider=None, task=None, times=0, **kwargs):
         self.task = task

@@ -11,9 +11,8 @@ from scrapy import signals
 from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 
-from tddc import Singleton, TaskManager, Storager, Task, CacheManager, TaskCacheManager, TaskConfigModel, DBSession
+from tddc import Singleton, TaskManager, Task, TaskCacheManager, TaskConfigModel, DBSession
 
-# from config import ConfigCenterExtern
 from .Scrapy import SingleSpider
 
 settings = get_project_settings()
@@ -25,7 +24,7 @@ log = logging.getLogger(__name__)
 
 class Crawler(object):
     '''
-    classdocs
+    Spider管理、任务分配
     '''
     __metaclass__ = Singleton
 
@@ -62,6 +61,13 @@ class Crawler(object):
                 gevent.sleep(1)
 
     def _spider_signals(self, signal, *args, **kwargs):
+        """
+        spider信号回调
+        :param signal:
+        :param args:
+        :param kwargs:
+        :return:
+        """
         if signal not in self._signals_list.keys():
             return
         func = self._signals_list.get(signal, None)
@@ -69,6 +75,10 @@ class Crawler(object):
             func(*args, **kwargs)
 
     def _spider_opened(self, spider):
+        """
+        接收到 spider 开启信号
+        :param spider:
+        """
         if not self._spider:
             self._spider = spider
             self._spider_mqs = spider.crawler.engine.slot.scheduler.mqs
@@ -77,6 +87,11 @@ class Crawler(object):
             log.info('Spider Was Ready.')
 
     def _crawl_successed(self, task, data):
+        """
+        抓取成功
+        :param task:
+        :param data:
+        """
         TaskCacheManager().set_cache(task, data)
         task.status = Task.Status.CrawledSuccess
         TaskManager().task_successed(task)
@@ -84,5 +99,10 @@ class Crawler(object):
                                 self.task_conf.parser_topic)
 
     def _crawl_failed(self, task, status):
+        """
+        抓取失败
+        :param task:
+        :param status:
+        """
         task.status = status
         TaskManager().task_failed(task)

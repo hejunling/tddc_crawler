@@ -51,7 +51,7 @@ class SingleSpider(scrapy.Spider):
 
     def __init__(self, callback=None):
         '''
-        params[0]:callback 
+        params[0]: 信号回调函数
         '''
         super(SingleSpider, self).__init__()
         self.signals_callback = callback
@@ -67,6 +67,13 @@ class SingleSpider(scrapy.Spider):
                 self.signals_callback(signal, spider=self)
 
     def add_task(self, task, is_retry=False, times=1):
+        """
+        忘Spider队列里加入任务
+        :param task:
+        :param is_retry: 是否需要重试
+        :param times: 重试次数
+        :return:
+        """
         if not is_retry:
             log.debug('Add New Task: ' + task.url)
         request_cls = ExternManager().get_model(task.platform, task.feature + '.request')
@@ -120,6 +127,12 @@ class SingleSpider(scrapy.Spider):
             self.remove_proxy(task, proxy)
 
     def remove_proxy(self, task, proxy):
+        """
+        从代理缓存池中移除当前 proxy
+        :param task:
+        :param proxy:
+        :return:
+        """
         if not proxy:
             return
         proxy = proxy.split('//')[1]
@@ -176,7 +189,7 @@ class SingleSpider(scrapy.Spider):
         elif success == 0:
             self.add_task(task, True, times - 1)
             return
-        if getattr(task, 'proxy_type', 'http') != 'ADSL':
+        if proxy and task.proxy and task.proxy != 'ADSL':
             def _back_pool():
                 CacheManager().set('%s:%s' % (task_conf.pool_key,
                                               task.platform),

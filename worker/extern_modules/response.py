@@ -9,6 +9,9 @@ from tddc import ExternBase
 
 
 class ResponseExtra(ExternBase):
+    """
+    Response扩展
+    """
 
     def __init__(self, spider, response):
         self.spider = spider
