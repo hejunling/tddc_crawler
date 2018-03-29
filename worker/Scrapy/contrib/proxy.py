@@ -29,11 +29,11 @@ class ProxyMiddleware(object):
         proxy = request.meta.get('proxy')
         if not proxy:
             task, _ = request.meta.get('item')
-            if getattr(task, 'proxy', 'http') != 'None':
-                if getattr(task, 'proxy', None) not in ['http', 'https', 'HTTP', 'HTTPS']:
+            if task.proxy:
+                if task.proxy not in ['http', 'https', 'HTTP', 'HTTPS', 'ADSL', 'adsl']:
                     request.meta['proxy'] = task.proxy
                     return
-                if getattr(task, 'proxy', 'http') == 'ADSL':
+                if task.proxy == 'ADSL':
                     ip_port = CacheManager().get_random('tddc:proxy:adsl', False)
                     # auth = base64.encodestring('tddc_crawler:tddc_crawler!@#$%^')
                     # request.headers['Proxy-Authorization'] = 'Basic ' + auth

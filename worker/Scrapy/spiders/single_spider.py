@@ -22,7 +22,6 @@ from tddc import CacheManager, ExternManager, TaskRecordManager, DBSession
 from worker.extern_modules.request import RequestExtra, FormRequestExtra
 from worker.extern_modules.response import ResponseExtra
 
-
 log = logging.getLogger(__name__)
 
 
@@ -72,10 +71,9 @@ class SingleSpider(scrapy.Spider):
             log.debug('Add New Task: ' + task.url)
         request_cls = ExternManager().get_model(task.platform, task.feature + '.request')
         if not request_cls:
-            method = getattr(task, 'method', 'GET')
-            if method == 'GET':
+            if not task.method or task.method == 'GET':
                 request_cls = RequestExtra
-            elif method == 'POST':
+            elif task.method == 'POST':
                 request_cls = FormRequestExtra
             else:
                 fmt = '[%s:%s] Invalid Task.'
@@ -106,11 +104,14 @@ class SingleSpider(scrapy.Spider):
             self.add_task(task, True, times + 1)
             return
         elif status == -1000:
-            self.warning('[%s] Was No Proxy.' % task.platform)
+            from worker.spider_manager import Crawler
+            log.warning('[%s] Was No Proxy.' % task.platform)
 
             def _retry():
                 self.add_task(task, True)
+                Crawler().suspend_task_count -= 1
             gevent.spawn_later(5, _retry)
+            Crawler().suspend_task_count += 1
             return
         else:
             err_msg = '{status}'.format(status=status)
@@ -122,7 +123,7 @@ class SingleSpider(scrapy.Spider):
         if not proxy:
             return
         proxy = proxy.split('//')[1]
-        if getattr(task, 'proxy_type', 'http') == 'ADSL':
+        if task.proxy == 'ADSL':
             CacheManager().remove('tddc:proxy:adsl', proxy)
         else:
             CacheManager().remove('%s:%s' % (task_conf.pool_key,
@@ -136,7 +137,15 @@ class SingleSpider(scrapy.Spider):
             self.http_error(task, times, proxy, response)
             return
         elif response.type == internet_err.TimeoutError:
-            err_msg = 'TimeoutError'
+            retry_times = task.retry if task.retry else 2
+            fmt = '[%s:%s] Crawled Failed(> TimeoutError | %s <). Will Retry After While.'
+            log.warning(fmt % (task.platform, task.url, proxy))
+            if times >= retry_times:
+                self.add_task(task, True)
+                self.remove_proxy(task, proxy)
+                return
+            self.add_task(task, True, times + 1)
+            return
         elif response.type in [internet_err.ConnectionRefusedError,
                                internet_err.TCPTimedOutError]:
             err_msg = '%d:%s' % (response.value.osError, response.value.message)

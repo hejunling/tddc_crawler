@@ -36,6 +36,7 @@ class Crawler(object):
         log.info('Spider Is Starting.')
         super(Crawler, self).__init__()
         self.task_conf = DBSession.query(TaskConfigModel).get(1)
+        self.suspend_task_count = 0
         self._spider = None
         self._spider_mqs = None
         self._signals_list = {signals.spider_opened: self._spider_opened,
@@ -51,7 +52,7 @@ class Crawler(object):
         size = self.task_conf.max_queue_size
         gevent.sleep(3)
         while True:
-            if self._get_spider_mqs_size() < size / 4:
+            if (self._get_spider_mqs_size() + self.suspend_task_count) < size / 4:
                 while True:
                     task = TaskManager().get()
                     self._spider.add_task(task)
